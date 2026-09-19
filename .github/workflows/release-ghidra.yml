@@ -143,14 +143,38 @@ jobs:
       - name: Generate Release Checksums
         shell: bash
         run: |
-          cd release
-          sha256sum ./* > SHA256SUMS
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+
+          release_dir = Path("release")
+          lines = []
+          for asset in sorted(path for path in release_dir.iterdir() if path.is_file()):
+            if asset.name == "SHA256SUMS":
+              continue
+            digest = hashlib.sha256(asset.read_bytes()).hexdigest()
+            lines.append(f"{digest}  {asset.name}")
+
+          (release_dir / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
+          PY
 
       - name: Publish GitHub Release
         shell: bash
         run: |
+          expected_commit=$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")
+          current_commit=$(git rev-parse HEAD)
+          if [ "$expected_commit" != "$current_commit" ]; then
+            echo "Checked out commit does not match tag '$RELEASE_TAG'" >&2
+            exit 1
+          fi
+
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            release_tag=$(gh release view "$RELEASE_TAG" --json tagName --jq '.tagName')
+            if [ "$release_tag" != "$RELEASE_TAG" ]; then
+              echo "Existing release does not match tag '$RELEASE_TAG'" >&2
+              exit 1
+            fi
             gh release upload "$RELEASE_TAG" release/* --clobber
           else
-            gh release create "$RELEASE_TAG" release/* --generate-notes
+            gh release create "$RELEASE_TAG" release/* --generate-notes --target "$RELEASE_TAG"
           fi
