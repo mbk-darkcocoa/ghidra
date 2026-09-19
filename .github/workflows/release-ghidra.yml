@@ -166,7 +166,9 @@ jobs:
 
             release_target=$(gh release view "$RELEASE_TAG" --json targetCommitish --jq '.targetCommitish')
             if [ -n "$release_target" ]; then
-              if git rev-parse "$release_target^{commit}" >/dev/null 2>&1; then
+              if [ "$release_target" = "$RELEASE_TAG" ]; then
+                release_target="$expected_commit"
+              elif git rev-parse "$release_target^{commit}" >/dev/null 2>&1; then
                 release_target=$(git rev-parse "$release_target^{commit}")
               fi
               if [ "$release_target" != "$expected_commit" ]; then
