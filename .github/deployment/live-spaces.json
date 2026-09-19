@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "spaces": {
+    "dev": {
+      "required_reviewers": ["platform-team"],
+      "wait_timer_minutes": 0,
+      "secrets": ["DEPLOYMENT_TOKEN_DEV", "ALERT_WEBHOOK_DEV"],
+      "approval_policy": "single-approver"
+    },
+    "staging": {
+      "required_reviewers": ["platform-team", "release-managers"],
+      "wait_timer_minutes": 10,
+      "secrets": ["DEPLOYMENT_TOKEN_STAGING", "ALERT_WEBHOOK_STAGING"],
+      "approval_policy": "two-person-review"
+    },
+    "prod": {
+      "required_reviewers": ["release-managers", "security-team"],
+      "wait_timer_minutes": 30,
+      "secrets": ["DEPLOYMENT_TOKEN_PROD", "ALERT_WEBHOOK_PROD"],
+      "approval_policy": "two-person-review"
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "required_workflows": [
+    {
+      "name": "build",
+      "path": ".github/workflows/build-ghidra.yml",
+      "purpose": "build baseline"
+    },
+    {
+      "name": "multi_platform_packaging",
+      "path": ".github/workflows/build-ghidra-multi-platform-artifact.yml",
+      "purpose": "cross-platform packaging baseline"
+    },
+    {
+      "name": "security_scan",
+      "path": ".github/workflows/codeql.yml",
+      "purpose": "security scanning baseline"
+    },
+    {
+      "name": "dependency_graph",
+      "path": ".github/workflows/dependency-submission.yml",
+      "purpose": "dependency submission baseline"
+    }
+  ],
+  "standardization": {
+    "jdk_source": "Ghidra/application.properties:application.java.min",
+    "require_consistent_names": true,
+    "require_workflow_file_presence": true
+  }
+}

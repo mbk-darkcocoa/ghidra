@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "domains": {
+    "infrastructure": {
+      "owner_repository": "mbk-darkcocoa/ghidra",
+      "components": [
+        {
+          "id": "platform-foundation",
+          "path": "docker",
+          "dependencies": [],
+          "target_spaces": ["dev", "staging", "prod"]
+        }
+      ]
+    },
+    "services": {
+      "owner_repository": "mbk-darkcocoa/ghidra",
+      "components": [
+        {
+          "id": "ghidra-services",
+          "path": "Ghidra",
+          "dependencies": ["platform-foundation"],
+          "target_spaces": ["dev", "staging", "prod"]
+        }
+      ]
+    },
+    "apps": {
+      "owner_repository": "mbk-darkcocoa/ghidra",
+      "components": [
+        {
+          "id": "ghidra-application",
+          "path": "Ghidra",
+          "dependencies": ["ghidra-services"],
+          "target_spaces": ["dev", "staging", "prod"]
+        }
+      ]
+    }
+  }
+}

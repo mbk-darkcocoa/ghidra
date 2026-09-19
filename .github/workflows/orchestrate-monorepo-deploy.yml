@@ -1,0 +1,217 @@
+name: Orchestrate Monorepo Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: Optional immutable release version. If omitted, one is generated.
+        required: false
+        type: string
+      start_space:
+        description: First space to deploy.
+        required: true
+        type: choice
+        default: dev
+        options:
+          - dev
+          - staging
+          - prod
+
+jobs:
+  load-domain-config:
+    runs-on: ubuntu-latest
+    outputs:
+      infra_component: ${{ steps.domain.outputs.infra_component }}
+      infra_repo: ${{ steps.domain.outputs.infra_repo }}
+      services_component: ${{ steps.domain.outputs.services_component }}
+      services_repo: ${{ steps.domain.outputs.services_repo }}
+      app_component: ${{ steps.domain.outputs.app_component }}
+      app_repo: ${{ steps.domain.outputs.app_repo }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Read deployment domains
+        id: domain
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "infra_component=$(jq -r '.domains.infrastructure.components[0].id' .github/deployment/domains.json)" >> "$GITHUB_OUTPUT"
+          echo "infra_repo=$(jq -r '.domains.infrastructure.owner_repository' .github/deployment/domains.json)" >> "$GITHUB_OUTPUT"
+          echo "services_component=$(jq -r '.domains.services.components[0].id' .github/deployment/domains.json)" >> "$GITHUB_OUTPUT"
+          echo "services_repo=$(jq -r '.domains.services.owner_repository' .github/deployment/domains.json)" >> "$GITHUB_OUTPUT"
+          echo "app_component=$(jq -r '.domains.apps.components[0].id' .github/deployment/domains.json)" >> "$GITHUB_OUTPUT"
+          echo "app_repo=$(jq -r '.domains.apps.owner_repository' .github/deployment/domains.json)" >> "$GITHUB_OUTPUT"
+
+  deploy-dev-infrastructure:
+    if: ${{ github.event.inputs.start_space == 'dev' }}
+    needs: [load-domain-config]
+    uses: ./.github/workflows/reusable-monorepo-deploy.yml
+    secrets: inherit
+    with:
+      domain: infrastructure
+      component: ${{ needs.load-domain-config.outputs.infra_component }}
+      owner_repository: ${{ needs.load-domain-config.outputs.infra_repo }}
+      target_space: dev
+      release_version: ${{ github.event.inputs.release_version }}
+      deploy_command: echo "Deploying infrastructure to dev"
+      verify_health_command: echo "Running infrastructure health checks in dev"
+      verify_dependency_command: echo "Verifying infrastructure dependencies in dev"
+      rollback_command: echo "Rolling back infrastructure in dev"
+
+  deploy-dev-services:
+    if: ${{ github.event.inputs.start_space == 'dev' }}
+    needs: [deploy-dev-infrastructure, load-domain-config]
+    uses: ./.github/workflows/reusable-monorepo-deploy.yml
+    secrets: inherit
+    with:
+      domain: services
+      component: ${{ needs.load-domain-config.outputs.services_component }}
+      owner_repository: ${{ needs.load-domain-config.outputs.services_repo }}
+      target_space: dev
+      release_version: ${{ github.event.inputs.release_version }}
+      deploy_command: echo "Deploying services to dev"
+      verify_health_command: echo "Running service health checks in dev"
+      verify_smoke_command: echo "Running service smoke tests in dev"
+      verify_dependency_command: echo "Verifying service dependencies in dev"
+      rollback_command: echo "Rolling back services in dev"
+
+  deploy-dev-apps:
+    if: ${{ github.event.inputs.start_space == 'dev' }}
+    needs: [deploy-dev-services, load-domain-config]
+    uses: ./.github/workflows/reusable-monorepo-deploy.yml
+    secrets: inherit
+    with:
+      domain: apps
+      component: ${{ needs.load-domain-config.outputs.app_component }}
+      owner_repository: ${{ needs.load-domain-config.outputs.app_repo }}
+      target_space: dev
+      release_version: ${{ github.event.inputs.release_version }}
+      build_command: ./gradlew buildGhidra --parallel
+      deploy_command: echo "Deploying apps to dev"
+      verify_health_command: echo "Running app health checks in dev"
+      verify_smoke_command: echo "Running app smoke tests in dev"
+      verify_dependency_command: echo "Verifying app dependencies in dev"
+      rollback_command: echo "Rolling back apps in dev"
+
+  verify-dev-gate:
+    if: ${{ github.event.inputs.start_space == 'dev' }}
+    runs-on: ubuntu-latest
+    needs: [deploy-dev-apps]
+    steps:
+      - name: Verify dev promotion gate
+        run: echo "Dev gate passed. Ready for staging promotion."
+
+  deploy-staging-infrastructure:
+    if: ${{ github.event.inputs.start_space != 'prod' }}
+    needs: [load-domain-config, verify-dev-gate]
+    uses: ./.github/workflows/reusable-monorepo-deploy.yml
+    secrets: inherit
+    with:
+      domain: infrastructure
+      component: ${{ needs.load-domain-config.outputs.infra_component }}
+      owner_repository: ${{ needs.load-domain-config.outputs.infra_repo }}
+      target_space: staging
+      release_version: ${{ github.event.inputs.release_version }}
+      deploy_command: echo "Deploying infrastructure to staging"
+      verify_health_command: echo "Running infrastructure health checks in staging"
+      verify_dependency_command: echo "Verifying infrastructure dependencies in staging"
+      rollback_command: echo "Rolling back infrastructure in staging"
+
+  deploy-staging-services:
+    if: ${{ github.event.inputs.start_space != 'prod' }}
+    needs: [deploy-staging-infrastructure, load-domain-config]
+    uses: ./.github/workflows/reusable-monorepo-deploy.yml
+    secrets: inherit
+    with:
+      domain: services
+      component: ${{ needs.load-domain-config.outputs.services_component }}
+      owner_repository: ${{ needs.load-domain-config.outputs.services_repo }}
+      target_space: staging
+      release_version: ${{ github.event.inputs.release_version }}
+      deploy_command: echo "Deploying services to staging"
+      verify_health_command: echo "Running service health checks in staging"
+      verify_smoke_command: echo "Running service smoke tests in staging"
+      verify_dependency_command: echo "Verifying service dependencies in staging"
+      rollback_command: echo "Rolling back services in staging"
+
+  deploy-staging-apps:
+    if: ${{ github.event.inputs.start_space != 'prod' }}
+    needs: [deploy-staging-services, load-domain-config]
+    uses: ./.github/workflows/reusable-monorepo-deploy.yml
+    secrets: inherit
+    with:
+      domain: apps
+      component: ${{ needs.load-domain-config.outputs.app_component }}
+      owner_repository: ${{ needs.load-domain-config.outputs.app_repo }}
+      target_space: staging
+      release_version: ${{ github.event.inputs.release_version }}
+      build_command: ./gradlew buildGhidra --parallel
+      deploy_command: echo "Deploying apps to staging"
+      verify_health_command: echo "Running app health checks in staging"
+      verify_smoke_command: echo "Running app smoke tests in staging"
+      verify_dependency_command: echo "Verifying app dependencies in staging"
+      rollback_command: echo "Rolling back apps in staging"
+
+  verify-staging-gate:
+    if: ${{ github.event.inputs.start_space != 'prod' }}
+    runs-on: ubuntu-latest
+    needs: [deploy-staging-apps]
+    steps:
+      - name: Verify staging promotion gate
+        run: echo "Staging gate passed. Ready for production promotion."
+
+  deploy-prod-infrastructure:
+    needs: [load-domain-config, verify-staging-gate]
+    uses: ./.github/workflows/reusable-monorepo-deploy.yml
+    secrets: inherit
+    with:
+      domain: infrastructure
+      component: ${{ needs.load-domain-config.outputs.infra_component }}
+      owner_repository: ${{ needs.load-domain-config.outputs.infra_repo }}
+      target_space: prod
+      release_version: ${{ github.event.inputs.release_version }}
+      deploy_command: echo "Deploying infrastructure to prod"
+      verify_health_command: echo "Running infrastructure health checks in prod"
+      verify_dependency_command: echo "Verifying infrastructure dependencies in prod"
+      rollback_command: echo "Rolling back infrastructure in prod"
+
+  deploy-prod-services:
+    needs: [deploy-prod-infrastructure, load-domain-config]
+    uses: ./.github/workflows/reusable-monorepo-deploy.yml
+    secrets: inherit
+    with:
+      domain: services
+      component: ${{ needs.load-domain-config.outputs.services_component }}
+      owner_repository: ${{ needs.load-domain-config.outputs.services_repo }}
+      target_space: prod
+      release_version: ${{ github.event.inputs.release_version }}
+      deploy_command: echo "Deploying services to prod"
+      verify_health_command: echo "Running service health checks in prod"
+      verify_smoke_command: echo "Running service smoke tests in prod"
+      verify_dependency_command: echo "Verifying service dependencies in prod"
+      rollback_command: echo "Rolling back services in prod"
+
+  deploy-prod-apps:
+    needs: [deploy-prod-services, load-domain-config]
+    uses: ./.github/workflows/reusable-monorepo-deploy.yml
+    secrets: inherit
+    with:
+      domain: apps
+      component: ${{ needs.load-domain-config.outputs.app_component }}
+      owner_repository: ${{ needs.load-domain-config.outputs.app_repo }}
+      target_space: prod
+      release_version: ${{ github.event.inputs.release_version }}
+      build_command: ./gradlew buildGhidra --parallel
+      deploy_command: echo "Deploying apps to prod"
+      verify_health_command: echo "Running app health checks in prod"
+      verify_smoke_command: echo "Running app smoke tests in prod"
+      verify_dependency_command: echo "Verifying app dependencies in prod"
+      rollback_command: echo "Rolling back apps in prod"
+
+  verify-prod-gate:
+    runs-on: ubuntu-latest
+    needs: [deploy-prod-apps]
+    steps:
+      - name: Verify production rollout
+        run: echo "Production gate passed. Monorepo deployment complete."

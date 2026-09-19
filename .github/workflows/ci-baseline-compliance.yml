@@ -1,0 +1,31 @@
+name: CI Baseline Compliance
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - '.github/deployment/ci-baselines.json'
+  push:
+    branches: [ master ]
+    paths:
+      - '.github/workflows/**'
+      - '.github/deployment/ci-baselines.json'
+
+jobs:
+  verify-baselines:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Verify required baseline workflows exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -r '.required_workflows[].path' .github/deployment/ci-baselines.json | while read -r workflow; do
+            if [ ! -f "$workflow" ]; then
+              echo "Missing required workflow baseline: $workflow" >&2
+              exit 1
+            fi
+            echo "Verified baseline: $workflow"
+          done

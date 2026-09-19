@@ -1,0 +1,222 @@
+name: Reusable Monorepo Deploy Contract
+
+on:
+  workflow_call:
+    inputs:
+      domain:
+        required: true
+        type: string
+      component:
+        required: true
+        type: string
+      owner_repository:
+        required: true
+        type: string
+      target_space:
+        required: true
+        type: string
+      release_version:
+        required: false
+        type: string
+        default: ''
+      artifact_path:
+        required: false
+        type: string
+        default: 'build/dist/ghidra_*.zip'
+      artifact_name:
+        required: false
+        type: string
+        default: ''
+      build_command:
+        required: false
+        type: string
+        default: ''
+      deploy_command:
+        required: false
+        type: string
+        default: ''
+      verify_health_command:
+        required: false
+        type: string
+        default: ''
+      verify_smoke_command:
+        required: false
+        type: string
+        default: ''
+      verify_dependency_command:
+        required: false
+        type: string
+        default: ''
+      rollback_command:
+        required: false
+        type: string
+        default: ''
+    secrets:
+      DEPLOYMENT_TOKEN:
+        required: false
+      ALERT_WEBHOOK:
+        required: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.target_space }}
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      resolved_release_version: ${{ steps.metadata.outputs.release_version }}
+      resolved_artifact_name: ${{ steps.metadata.outputs.artifact_name }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Resolve release metadata
+        id: metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_version="${{ inputs.release_version }}"
+          if [ -z "$release_version" ]; then
+            release_version="$(date -u +%Y.%m.%d).${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}"
+          fi
+
+          artifact_name="${{ inputs.artifact_name }}"
+          if [ -z "$artifact_name" ]; then
+            artifact_name="${{ inputs.component }}-${release_version}-${{ inputs.target_space }}"
+          fi
+
+          cat > deployment-metadata.json <<JSON
+          {
+            "domain": "${{ inputs.domain }}",
+            "component": "${{ inputs.component }}",
+            "owner_repository": "${{ inputs.owner_repository }}",
+            "target_space": "${{ inputs.target_space }}",
+            "release_version": "${release_version}",
+            "artifact_name": "${artifact_name}",
+            "workflow_run_id": "${GITHUB_RUN_ID}",
+            "workflow_attempt": "${GITHUB_RUN_ATTEMPT}",
+            "git_sha": "${GITHUB_SHA}",
+            "git_ref": "${GITHUB_REF}"
+          }
+          JSON
+
+          echo "release_version=${release_version}" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=${artifact_name}" >> "$GITHUB_OUTPUT"
+
+      - name: Build artifact hook
+        if: ${{ inputs.build_command != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ${{ inputs.build_command }}
+
+      - name: Upload deployment metadata
+        uses: actions/upload-artifact@v7
+        with:
+          name: metadata-${{ steps.metadata.outputs.artifact_name }}
+          path: deployment-metadata.json
+
+      - name: Upload build artifact
+        if: ${{ hashFiles(inputs.artifact_path) != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.metadata.outputs.artifact_name }}
+          path: ${{ inputs.artifact_path }}
+
+      - name: Deploy hook
+        if: ${{ inputs.deploy_command != '' }}
+        shell: bash
+        env:
+          DEPLOYMENT_TOKEN: ${{ secrets.DEPLOYMENT_TOKEN }}
+        run: |
+          set -euo pipefail
+          ${{ inputs.deploy_command }}
+
+      - name: Verify health checks
+        if: ${{ inputs.verify_health_command != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ${{ inputs.verify_health_command }}
+
+      - name: Verify smoke tests
+        if: ${{ inputs.verify_smoke_command != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ${{ inputs.verify_smoke_command }}
+
+      - name: Verify dependency checks
+        if: ${{ inputs.verify_dependency_command != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ${{ inputs.verify_dependency_command }}
+
+      - name: Rollback hook
+        if: ${{ failure() && inputs.rollback_command != '' }}
+        shell: bash
+        continue-on-error: true
+        env:
+          DEPLOYMENT_TOKEN: ${{ secrets.DEPLOYMENT_TOKEN }}
+        run: |
+          set -euo pipefail
+          ${{ inputs.rollback_command }}
+
+      - name: Deployment summary
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          {
+            echo "## Deployment Result"
+            echo "- Domain: \`${{ inputs.domain }}\`"
+            echo "- Component: \`${{ inputs.component }}\`"
+            echo "- Owner repository: \`${{ inputs.owner_repository }}\`"
+            echo "- Target space: \`${{ inputs.target_space }}\`"
+            echo "- Release version: \`${{ steps.metadata.outputs.release_version }}\`"
+            echo "- Artifact name: \`${{ steps.metadata.outputs.artifact_name }}\`"
+            echo "- Outcome: \`${{ job.status }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload deploy logs
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          {
+            echo "workflow_run_id=${GITHUB_RUN_ID}"
+            echo "workflow_attempt=${GITHUB_RUN_ATTEMPT}"
+            echo "component=${{ inputs.component }}"
+            echo "target_space=${{ inputs.target_space }}"
+            echo "release_version=${{ steps.metadata.outputs.release_version }}"
+            echo "status=${{ job.status }}"
+          } > deploy-log.txt
+
+      - name: Archive deploy logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: logs-${{ steps.metadata.outputs.artifact_name }}
+          path: deploy-log.txt
+
+      - name: Alert on deployment failure
+        if: ${{ failure() && secrets.ALERT_WEBHOOK != '' }}
+        shell: bash
+        env:
+          ALERT_WEBHOOK: ${{ secrets.ALERT_WEBHOOK }}
+        run: |
+          set -euo pipefail
+          payload=$(cat <<JSON
+          {
+            "repository": "${GITHUB_REPOSITORY}",
+            "workflow": "${GITHUB_WORKFLOW}",
+            "run_id": "${GITHUB_RUN_ID}",
+            "domain": "${{ inputs.domain }}",
+            "component": "${{ inputs.component }}",
+            "target_space": "${{ inputs.target_space }}",
+            "release_version": "${{ steps.metadata.outputs.release_version }}",
+            "status": "failed"
+          }
+          JSON
+          )
+          curl -sS -X POST -H 'Content-Type: application/json' --data "$payload" "$ALERT_WEBHOOK"
