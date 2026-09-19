@@ -12,7 +12,7 @@ on:
         type: string
 
 concurrency:
-  group: release-ghidra-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+  group: release-ghidra-${{ github.event.inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -36,7 +36,7 @@ jobs:
       - name: Check out release tag
         shell: bash
         run: |
-          git fetch --force --tags
+          git fetch --tags
           if ! git rev-parse "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
             echo "Tag '$RELEASE_TAG' does not exist" >&2
             exit 1
@@ -45,7 +45,7 @@ jobs:
 
       - name: Read Ghidra JDK Version
         shell: bash
-        run: echo "JDK_VER=$(awk -F'=' '$1==\"application.java.min\" {print $2}' Ghidra/application.properties)" >> "$GITHUB_ENV"
+        run: echo "JDK_VER=$(awk -F'=' '$1=="application.java.min" {print $2}' Ghidra/application.properties)" >> "$GITHUB_ENV"
 
       - name: Setup JDK
         uses: actions/setup-java@v5
@@ -80,7 +80,7 @@ jobs:
       - name: Check out release tag
         shell: bash
         run: |
-          git fetch --force --tags
+          git fetch --tags
           if ! git rev-parse "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
             echo "Tag '$RELEASE_TAG' does not exist" >&2
             exit 1
