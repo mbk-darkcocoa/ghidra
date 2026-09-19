@@ -161,6 +161,18 @@ jobs:
               echo "Existing release does not match tag '$RELEASE_TAG'" >&2
               exit 1
             fi
+
+            release_target=$(gh release view "$RELEASE_TAG" --json targetCommitish --jq '.targetCommitish')
+            if [ -n "$release_target" ]; then
+              if git rev-parse "$release_target^{commit}" >/dev/null 2>&1; then
+                release_target=$(git rev-parse "$release_target^{commit}")
+              fi
+              if [ "$release_target" != "$expected_commit" ]; then
+                echo "Existing release target does not match tag '$RELEASE_TAG'" >&2
+                exit 1
+              fi
+            fi
+
             gh release upload "$RELEASE_TAG" release/* --clobber
           else
             gh release create "$RELEASE_TAG" release/* --generate-notes --target "$RELEASE_TAG"
