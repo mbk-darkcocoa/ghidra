@@ -38,7 +38,11 @@ jobs:
         shell: bash
         run: |
           git fetch --force --tags
-          git checkout "$RELEASE_TAG"
+          if ! git rev-parse "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Tag '$RELEASE_TAG' does not exist" >&2
+            exit 1
+          fi
+          git checkout "refs/tags/$RELEASE_TAG"
 
       - name: Read Ghidra JDK Version
         shell: bash
@@ -82,7 +86,11 @@ jobs:
         shell: bash
         run: |
           git fetch --force --tags
-          git checkout "$RELEASE_TAG"
+          if ! git rev-parse "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Tag '$RELEASE_TAG' does not exist" >&2
+            exit 1
+          fi
+          git checkout "refs/tags/$RELEASE_TAG"
 
       - name: Download Platform Artifacts
         uses: actions/download-artifact@v8

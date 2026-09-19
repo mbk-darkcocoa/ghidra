@@ -45,11 +45,8 @@ jobs:
           languages: ${{ matrix.language }}
           queries: security-extended
 
-      - name: Fetch Dependencies
-        run: ./gradlew -I gradle/support/fetchDependencies.gradle -DhideDownloadProgress -DnoEclipse
-
       - name: Build for CodeQL
-        run: ./gradlew buildGhidra --parallel
+        run: ./gradlew -I gradle/support/fetchDependencies.gradle buildGhidra --parallel -DhideDownloadProgress -DnoEclipse
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4.38.1
