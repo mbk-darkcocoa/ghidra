@@ -1,0 +1,130 @@
+name: Release Ghidra
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Git tag to publish
+        required: true
+        type: string
+
+concurrency:
+  group: release-ghidra-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ubuntu-latest, macos-latest, windows-latest]
+
+    runs-on: ${{ matrix.platform }}
+    permissions:
+      contents: read
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Check out requested tag
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          git fetch --force --tags
+          git checkout "$RELEASE_TAG"
+
+      - name: Read Ghidra JDK Version
+        shell: bash
+        run: echo "JDK_VER=$(awk -F'=' '$1==\"application.java.min\" {print $2}' Ghidra/application.properties)" >> "$GITHUB_ENV"
+
+      - name: Setup JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '${{ env.JDK_VER }}'
+
+      - name: Fetch Dependencies
+        run: ./gradlew -I gradle/support/fetchDependencies.gradle -DhideDownloadProgress -DnoEclipse
+
+      - name: Build Ghidra
+        run: ./gradlew buildGhidra --parallel
+
+      - name: Upload Platform Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.platform }}
+          path: build/dist/ghidra_*.zip
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Check out requested tag
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          git fetch --force --tags
+          git checkout "$RELEASE_TAG"
+
+      - name: Download Platform Artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+
+      - name: Merge Platform Artifacts
+        shell: bash
+        run: |
+          mkdir -p merged release
+          first_zip=""
+          while IFS= read -r zip_path; do
+            unzip -n "$zip_path" -d merged
+            if [ -z "$first_zip" ]; then
+              first_zip="$zip_path"
+            fi
+            platform_dir=$(basename "$(dirname "$zip_path")")
+            cp "$zip_path" "release/${platform_dir}-$(basename "$zip_path")"
+          done < <(find artifacts -type f -name 'ghidra_*.zip' | sort)
+
+          if [ -z "$first_zip" ]; then
+            echo "No built release zips were found" >&2
+            exit 1
+          fi
+
+          merged_name=$(basename "$first_zip")
+          (
+            cd merged
+            zip -r "../release/${merged_name}" .
+          )
+
+      - name: Generate Release Checksums
+        shell: bash
+        run: |
+          cd release
+          sha256sum ./* > SHA256SUMS
+
+      - name: Publish GitHub Release
+        shell: bash
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release/* --clobber
+          else
+            gh release create "$RELEASE_TAG" release/* --generate-notes
+          fi

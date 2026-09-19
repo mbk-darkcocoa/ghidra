@@ -3,9 +3,17 @@ name: Build Ghidra Multi-Platform Artifact
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: build-ghidra-multi-platform-artifact-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         platform: [ubuntu-latest, macos-latest, windows-latest]
 
@@ -80,4 +88,3 @@ jobs:
         with:
           path: merged/ghidra_*.zip
           archive: false
-
