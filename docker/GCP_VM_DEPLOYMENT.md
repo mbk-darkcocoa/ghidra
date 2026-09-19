@@ -17,7 +17,7 @@ Do **not** expose raw X11 to the network.
 
 Do **not** use `MODE=ghidra-server` on a Linux VM where SELinux must remain enforcing. The existing
 server documentation notes that Ghidra Server may not start properly unless SELinux is disabled; see
-`/home/runner/work/ghidra/ghidra/Ghidra/RuntimeScripts/server/svrREADME.md`.
+`Ghidra/RuntimeScripts/server/svrREADME.md`.
 
 ## VM baseline
 
@@ -46,7 +46,7 @@ The repository build requires:
 On the VM, build from the source checkout:
 
 ```bash
-cd /home/runner/work/ghidra/ghidra
+cd <ghidra-source-root>
 gradle -I gradle/support/fetchDependencies.gradle
 gradle buildGhidra
 ```
@@ -54,13 +54,13 @@ gradle buildGhidra
 The compressed development build is written to:
 
 ```text
-/home/runner/work/ghidra/ghidra/build/dist/
+build/dist/
 ```
 
 If you want an uncompressed platform-local distribution instead, use:
 
 ```bash
-cd /home/runner/work/ghidra/ghidra
+cd <ghidra-source-root>
 gradle assembleAll
 ```
 
@@ -165,7 +165,7 @@ Example:
 
 ```bash
 cd /tmp
-unzip /home/runner/work/ghidra/ghidra/build/dist/ghidra_*.zip
+unzip <ghidra-source-root>/build/dist/ghidra_*.zip
 cd /tmp/ghidra_*
 ./docker/build-docker-image.sh
 ```
