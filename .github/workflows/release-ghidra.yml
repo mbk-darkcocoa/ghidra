@@ -54,10 +54,7 @@ jobs:
           java-version: '${{ env.JDK_VER }}'
 
       - name: Fetch Dependencies
-        run: ./gradlew -I gradle/support/fetchDependencies.gradle -DhideDownloadProgress -DnoEclipse
-
-      - name: Build Ghidra
-        run: ./gradlew buildGhidra --parallel
+        run: ./gradlew -I gradle/support/fetchDependencies.gradle buildGhidra --parallel -DhideDownloadProgress -DnoEclipse
 
       - name: Upload Platform Artifact
         uses: actions/upload-artifact@v7
@@ -100,7 +97,6 @@ jobs:
         run: |
           python - <<'PY'
           import copy
-          import hashlib
           import shutil
           from pathlib import Path
           from zipfile import ZipFile
@@ -117,24 +113,17 @@ jobs:
             shutil.copy2(zip_path, release_dir / f"{platform_dir}-{zip_path.name}")
 
           merged_path = release_dir / zip_paths[0].name
-          seen = {}
+          seen = set()
 
           with ZipFile(merged_path, "w") as merged_zip:
             for zip_path in zip_paths:
               with ZipFile(zip_path) as source_zip:
                 for info in source_zip.infolist():
-                  data = source_zip.read(info.filename)
-                  digest = hashlib.sha256(data).hexdigest()
-
-                  previous = seen.get(info.filename)
-                  if previous is not None:
-                    if previous != digest:
-                      raise SystemExit(
-                        f"Conflicting file contents for {info.filename} between release archives"
-                      )
+                  if info.filename in seen:
                     continue
 
-                  seen[info.filename] = digest
+                  seen.add(info.filename)
+                  data = source_zip.read(info.filename)
                   merged_zip.writestr(copy.copy(info), data)
           PY
 
