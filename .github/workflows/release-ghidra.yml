@@ -100,27 +100,45 @@ jobs:
       - name: Merge Platform Artifacts
         shell: bash
         run: |
-          mkdir -p merged release
-          first_zip=""
-          while IFS= read -r zip_path; do
-            unzip -n "$zip_path" -d merged
-            if [ -z "$first_zip" ]; then
-              first_zip="$zip_path"
-            fi
-            platform_dir=$(basename "$(dirname "$zip_path")")
-            cp "$zip_path" "release/${platform_dir}-$(basename "$zip_path")"
-          done < <(find artifacts -type f -name 'ghidra_*.zip' | sort)
+          python - <<'PY'
+          import copy
+          import hashlib
+          import shutil
+          from pathlib import Path
+          from zipfile import ZipFile
 
-          if [ -z "$first_zip" ]; then
-            echo "No built release zips were found" >&2
-            exit 1
-          fi
+          zip_paths = sorted(Path("artifacts").glob("**/ghidra_*.zip"))
+          if not zip_paths:
+            raise SystemExit("No built release zips were found")
 
-          merged_name=$(basename "$first_zip")
-          (
-            cd merged
-            zip -r "../release/${merged_name}" .
-          )
+          release_dir = Path("release")
+          release_dir.mkdir(exist_ok=True)
+
+          for zip_path in zip_paths:
+            platform_dir = zip_path.parent.name
+            shutil.copy2(zip_path, release_dir / f"{platform_dir}-{zip_path.name}")
+
+          merged_path = release_dir / zip_paths[0].name
+          seen = {}
+
+          with ZipFile(merged_path, "w") as merged_zip:
+            for zip_path in zip_paths:
+              with ZipFile(zip_path) as source_zip:
+                for info in source_zip.infolist():
+                  data = source_zip.read(info.filename)
+                  digest = hashlib.sha256(data).hexdigest()
+
+                  previous = seen.get(info.filename)
+                  if previous is not None:
+                    if previous != digest:
+                      raise SystemExit(
+                        f"Conflicting file contents for {info.filename} between release archives"
+                      )
+                    continue
+
+                  seen[info.filename] = digest
+                  merged_zip.writestr(copy.copy(info), data)
+          PY
 
       - name: Generate Release Checksums
         shell: bash
