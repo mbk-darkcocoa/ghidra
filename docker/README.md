@@ -10,6 +10,9 @@ From the root directory of your Ghidra release, run the following command.
 
 This will build the ghidra docker image with a tag corresponding to the release version of Ghidra.
 
+For deployment guidance on a Google Cloud VM with SELinux enforcing and browser-based access, see
+`docker/GCP_VM_DEPLOYMENT.md`.
+
 
 ## The MODE environment variable
 
@@ -48,6 +51,9 @@ the corresponding Command Line Interface (CLI) for the `MODE` executed will disp
 Volumes within the container may run into permission issues if the volumes are not accessible by users in the group id `1001`.
 
 The default uid and guid for the container is `1001:1001`. Volumes that get mapped to the container should be accessible by this uid/guid.
+
+On SELinux-enforcing hosts, bind mounts may also need a container label such as `:Z` or `:z` in
+order for the container to access them without disabling SELinux.
 
 Adding the host machine's user to the group `1001` on the host helps manage volumes that will be used in the container.
 This can easily be done by executing `sudo usermod -aG 1001 <user>` on Linux.
@@ -119,6 +125,9 @@ docker run \
 ```
 
 Volumes would need to be mounted to the server container to save the repositories, users, and also to configure the server as well.
+
+On Linux hosts that must keep SELinux enforcing, consult `Ghidra/RuntimeScripts/server/svrREADME.md`
+before using this mode.
 
 To utilize svrAdmin, exec into the running ghidra server container (`docker exec -it <container-id> bash`) for a bash shell in the container. 
 After exec'ing into the container, administration and management of the Ghidra server is the same as outside of a containerized environment.
@@ -208,4 +217,3 @@ This use case is very similar to the headless mode's example with the added bene
 
 Again, in this example, appropriate permissions and group assignment for `/path/to/myproject` and `/path/to/mybinary` are necessary 
 in order to not run into permissions issues.
-
