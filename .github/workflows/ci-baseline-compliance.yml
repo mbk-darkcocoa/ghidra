@@ -11,6 +11,9 @@ on:
       - '.github/workflows/**'
       - '.github/deployment/ci-baselines.json'
 
+permissions:
+  contents: read
+
 jobs:
   verify-baselines:
     runs-on: ubuntu-latest
