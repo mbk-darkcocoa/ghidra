@@ -1,0 +1,183 @@
+name: Release Ghidra
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Git tag to publish
+        required: true
+        type: string
+
+concurrency:
+  group: release-ghidra-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ubuntu-latest, macos-latest, windows-latest]
+
+    runs-on: ${{ matrix.platform }}
+    permissions:
+      contents: read
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Check out release tag
+        shell: bash
+        run: |
+          git fetch --tags
+          if ! git rev-parse "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Tag '$RELEASE_TAG' does not exist" >&2
+            exit 1
+          fi
+          git checkout "refs/tags/$RELEASE_TAG"
+
+      - name: Read Ghidra JDK Version
+        shell: bash
+        run: echo "JDK_VER=$(awk -F'=' '$1=="application.java.min" {print $2}' Ghidra/application.properties)" >> "$GITHUB_ENV"
+
+      - name: Setup JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '${{ env.JDK_VER }}'
+
+      - name: Fetch Dependencies
+        run: ./gradlew -I gradle/support/fetchDependencies.gradle buildGhidra --parallel -DhideDownloadProgress -DnoEclipse
+
+      - name: Upload Platform Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.platform }}
+          path: build/dist/ghidra_*.zip
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Check out release tag
+        shell: bash
+        run: |
+          git fetch --tags
+          if ! git rev-parse "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Tag '$RELEASE_TAG' does not exist" >&2
+            exit 1
+          fi
+          git checkout "refs/tags/$RELEASE_TAG"
+
+      - name: Download Platform Artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+
+      - name: Merge Platform Artifacts
+        shell: bash
+        run: |
+          python - <<'PY'
+          import copy
+          import shutil
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          zip_paths = sorted(Path("artifacts").glob("**/ghidra_*.zip"))
+          if not zip_paths:
+            raise SystemExit("No built release zips were found")
+
+          release_dir = Path("release")
+          release_dir.mkdir(exist_ok=True)
+
+          for zip_path in zip_paths:
+            platform_dir = zip_path.parent.name
+            shutil.copy2(zip_path, release_dir / f"{platform_dir}-{zip_path.name}")
+
+          merged_path = release_dir / zip_paths[0].name
+          seen = set()
+
+          with ZipFile(merged_path, "w") as merged_zip:
+            for zip_path in zip_paths:
+              with ZipFile(zip_path) as source_zip:
+                for info in source_zip.infolist():
+                  if info.filename in seen:
+                    continue
+
+                  seen.add(info.filename)
+                  data = source_zip.read(info.filename)
+                  merged_zip.writestr(copy.copy(info), data)
+          PY
+
+      - name: Generate Release Checksums
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+
+          release_dir = Path("release")
+          lines = []
+          for asset in sorted(path for path in release_dir.iterdir() if path.is_file()):
+            if asset.name == "SHA256SUMS":
+              continue
+            digest = hashlib.sha256(asset.read_bytes()).hexdigest()
+            lines.append(f"{digest}  {asset.name}")
+
+          (release_dir / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
+          PY
+
+      - name: Publish GitHub Release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          expected_commit=$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")
+          current_commit=$(git rev-parse HEAD)
+          if [ "$expected_commit" != "$current_commit" ]; then
+            echo "Checked out commit does not match tag '$RELEASE_TAG'" >&2
+            exit 1
+          fi
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            release_tag=$(gh release view "$RELEASE_TAG" --json tagName --jq '.tagName')
+            if [ "$release_tag" != "$RELEASE_TAG" ]; then
+              echo "Existing release does not match tag '$RELEASE_TAG'" >&2
+              exit 1
+            fi
+
+            release_target=$(gh release view "$RELEASE_TAG" --json targetCommitish --jq '.targetCommitish')
+            if [ -n "$release_target" ]; then
+              if [ "$release_target" = "$RELEASE_TAG" ]; then
+                release_target="$expected_commit"
+              elif git rev-parse "$release_target^{commit}" >/dev/null 2>&1; then
+                release_target=$(git rev-parse "$release_target^{commit}")
+              fi
+              if [ "$release_target" != "$expected_commit" ]; then
+                echo "Existing release target does not match tag '$RELEASE_TAG'" >&2
+                exit 1
+              fi
+            fi
+
+            gh release upload "$RELEASE_TAG" release/* --clobber
+          else
+            gh release create "$RELEASE_TAG" release/* --generate-notes --target "$RELEASE_TAG"
+          fi
