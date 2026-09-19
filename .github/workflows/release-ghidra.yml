@@ -148,6 +148,8 @@ jobs:
       - name: Publish GitHub Release
         shell: bash
         run: |
+          set -euo pipefail
+
           expected_commit=$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")
           current_commit=$(git rev-parse HEAD)
           if [ "$expected_commit" != "$current_commit" ]; then
