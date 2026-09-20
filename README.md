@@ -101,6 +101,18 @@ developing against fully built Ghidra installations which can be downloaded from
 To develop the Ghidra tool itself, it is highly recommended to use Eclipse, which the Ghidra 
 development process has been highly customized for.
 
+### GitHub Codespaces
+This repository includes a `.devcontainer` configuration for GitHub Codespaces. The container
+installs JDK 21, Python 3, native build tools, and an Xvfb display for headless Gradle tasks.
+After the Codespace is created it automatically runs:
+```
+./gradlew -I gradle/support/fetchDependencies.gradle prepdev
+```
+When you need a full local build inside the Codespace, run:
+```
+./gradlew buildNatives buildGhidra
+```
+
 ##### Install build and development tools:
 * Follow the above [build instructions](#build) so the build completes without errors
 * Install [Eclipse IDE for Java Developers][eclipse]

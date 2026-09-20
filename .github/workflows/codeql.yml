@@ -1,0 +1,55 @@
+name: CodeQL
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  schedule:
+    - cron: "23 3 * * 1"
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v5
+
+      - name: Read build JDK version
+        id: java-version
+        shell: bash
+        run: |
+          echo "version=$(awk -F= '/^application.java.compiler=/{print $2}' Ghidra/application.properties)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ steps.java-version.outputs.version }}
+          cache: gradle
+
+      - name: Start Xvfb
+        run: |
+          /usr/bin/Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp &
+          echo "DISPLAY=:99" >> "$GITHUB_ENV"
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: java-kotlin,c-cpp,python
+          build-mode: manual
+          queries: security-and-quality
+
+      - name: Build Ghidra
+        run: ./gradlew -I gradle/support/fetchDependencies.gradle buildGhidra
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v4
