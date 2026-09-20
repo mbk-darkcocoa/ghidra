@@ -17,8 +17,21 @@ permissions:
 
 jobs:
   analyze:
+    name: Analyze (${{ matrix.label }})
     runs-on: ubuntu-latest
     timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: java-kotlin,c-cpp
+            languages: java-kotlin,c-cpp
+            build-mode: manual
+            compiled: true
+          - label: python
+            languages: python
+            build-mode: none
+            compiled: false
     steps:
       - name: Checkout sources
         uses: actions/checkout@v5
@@ -30,6 +43,7 @@ jobs:
           echo "version=$(awk -F= '/^application.java.compiler=/{print $2}' Ghidra/application.properties)" >> "$GITHUB_OUTPUT"
 
       - name: Set up JDK
+        if: matrix.compiled
         uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -37,6 +51,7 @@ jobs:
           cache: gradle
 
       - name: Start Xvfb
+        if: matrix.compiled
         run: |
           /usr/bin/Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp &
           echo "DISPLAY=:99" >> "$GITHUB_ENV"
@@ -44,11 +59,12 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
-          languages: java-kotlin,c-cpp,python
-          build-mode: manual
+          languages: ${{ matrix.languages }}
+          build-mode: ${{ matrix.build-mode }}
           queries: security-and-quality
 
       - name: Build Ghidra
+        if: matrix.compiled
         run: ./gradlew -I gradle/support/fetchDependencies.gradle buildGhidra
 
       - name: Perform CodeQL analysis
