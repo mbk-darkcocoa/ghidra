@@ -5,6 +5,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     DISPLAY=:99
 
 COPY Ghidra/application.properties /tmp/ghidra-application.properties
+COPY .devcontainer/entrypoint.sh /usr/local/share/ghidra-devcontainer-entrypoint.sh
 
 RUN apt-get update \
     && JAVA_VERSION="$(awk -F= '/^application.java.compiler=/{print $2}' /tmp/ghidra-application.properties)" \
@@ -33,6 +34,9 @@ RUN apt-get update \
         libxrandr2 \
         libxrender1 \
         libxtst6 \
+    && chmod +x /usr/local/share/ghidra-devcontainer-entrypoint.sh \
     && ln -sfn "$(dirname "$(dirname "$(readlink -f "$(command -v javac)")")")" /usr/lib/jvm/ghidra-java \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/ghidra-application.properties
+
+ENTRYPOINT ["/usr/local/share/ghidra-devcontainer-entrypoint.sh"]
