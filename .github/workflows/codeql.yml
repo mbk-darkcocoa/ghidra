@@ -50,12 +50,6 @@ jobs:
           java-version: ${{ steps.java-version.outputs.version }}
           cache: gradle
 
-      - name: Start Xvfb
-        if: matrix.compiled
-        run: |
-          /usr/bin/Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp &
-          echo "DISPLAY=:99" >> "$GITHUB_ENV"
-
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
@@ -65,7 +59,7 @@ jobs:
 
       - name: Build Ghidra
         if: matrix.compiled
-        run: ./gradlew -I gradle/support/fetchDependencies.gradle buildNatives buildGhidra
+        run: xvfb-run -a ./gradlew -I gradle/support/fetchDependencies.gradle buildNatives buildGhidra
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v4
