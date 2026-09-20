@@ -6,7 +6,7 @@
   "remoteUser": "vscode",
   "containerEnv": {
     "DISPLAY": ":99",
-    "JAVA_HOME": "/usr/lib/jvm/java-21-openjdk-amd64"
+    "JAVA_HOME": "/usr/lib/jvm/ghidra-java"
   },
   "mounts": [
     "source=ghidra-gradle-cache,target=/home/vscode/.gradle,type=volume"
@@ -22,13 +22,7 @@
         "redhat.vscode-xml"
       ],
       "settings": {
-        "java.configuration.runtimes": [
-          {
-            "name": "JavaSE-21",
-            "path": "/usr/lib/jvm/java-21-openjdk-amd64",
-            "default": true
-          }
-        ],
+        "java.jdt.ls.java.home": "/usr/lib/jvm/ghidra-java",
         "python.defaultInterpreterPath": "/usr/bin/python3"
       }
     }

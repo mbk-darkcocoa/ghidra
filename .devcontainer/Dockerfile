@@ -1,17 +1,20 @@
 FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
-    JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 \
+    JAVA_HOME=/usr/lib/jvm/ghidra-java \
     DISPLAY=:99
 
+COPY Ghidra/application.properties /tmp/ghidra-application.properties
+
 RUN apt-get update \
+    && JAVA_VERSION="$(awk -F= '/^application.java.compiler=/{print $2}' /tmp/ghidra-application.properties)" \
     && apt-get install -y --no-install-recommends \
         build-essential \
         clang \
         gcc \
         g++ \
         make \
-        openjdk-21-jdk \
+        "openjdk-${JAVA_VERSION}-jdk" \
         pkg-config \
         python-is-python3 \
         python3 \
@@ -30,5 +33,6 @@ RUN apt-get update \
         libxrandr2 \
         libxrender1 \
         libxtst6 \
+    && ln -sfn "$(dirname "$(dirname "$(readlink -f "$(command -v javac)")")")" /usr/lib/jvm/ghidra-java \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* /tmp/ghidra-application.properties
