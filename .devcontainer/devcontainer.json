@@ -11,7 +11,7 @@
   "mounts": [
     "source=ghidra-gradle-cache,target=/home/vscode/.gradle,type=volume"
   ],
-  "postCreateCommand": "bash -lc 'gradle -I gradle/support/fetchDependencies.gradle prepdev'",
+  "postCreateCommand": "bash -lc './gradlew -I gradle/support/fetchDependencies.gradle prepdev'",
   "customizations": {
     "vscode": {
       "extensions": [

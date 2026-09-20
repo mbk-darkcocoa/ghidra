@@ -107,7 +107,7 @@ installs the JDK version required by Ghidra's build, Python 3, native build tool
 display for headless Gradle tasks.
 After the Codespace is created it automatically runs:
 ```
-gradle -I gradle/support/fetchDependencies.gradle prepdev
+./gradlew -I gradle/support/fetchDependencies.gradle prepdev
 ```
 When you need a full local build inside the Codespace, run:
 ```
