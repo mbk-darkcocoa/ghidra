@@ -59,7 +59,7 @@ jobs:
 
       - name: Build Ghidra
         if: matrix.compiled
-        run: xvfb-run -a ./gradlew -I gradle/support/fetchDependencies.gradle buildNatives buildGhidra
+        run: xvfb-run -a ./gradlew -I gradle/support/fetchDependencies.gradle buildNatives assembleAll
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v4
