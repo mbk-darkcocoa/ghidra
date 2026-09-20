@@ -103,7 +103,8 @@ development process has been highly customized for.
 
 ### GitHub Codespaces
 This repository includes a `.devcontainer` configuration for GitHub Codespaces. The container
-installs JDK 21, Python 3, native build tools, and an Xvfb display for headless Gradle tasks.
+installs the JDK version required by Ghidra's build, Python 3, native build tools, and an Xvfb
+display for headless Gradle tasks.
 After the Codespace is created it automatically runs:
 ```
 ./gradlew -I gradle/support/fetchDependencies.gradle prepdev
